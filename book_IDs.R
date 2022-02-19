@@ -3,7 +3,8 @@ library(tidyverse)
 
 ID_title_length <- 5
 
-removable <- c("a", "and", "for", "in", "of", "the", "to", "with")
+removable <- c("a", "and", "for", "in", "of", "the", "to", "with") %>% 
+  str_to_upper() # titles will be caps for consistency
 removable_regex <- paste0("^", removable, "$", collapse = "|")
 
 
@@ -15,22 +16,22 @@ set.seed(2022)
 books_sample <- slice_sample(books, n = 20)
 
 books_sample <- books_sample %>%
-  mutate(no_punct_title = str_remove_all(title, "[:punct:]"),
+  mutate(no_punct_title = str_remove_all(title, "[:punct:]"), # don't want punctuation in ID
          words = str_split(str_to_upper(no_punct_title), # caps for consistency
                            boundary("word")))
 
 
 
-#### Test cases ####
+#### Test cases - titles ####
 single_word <- books_sample$words[8] %>% unlist() # Thud!
 many_words <- books_sample$words[10] %>% unlist() # TDitW
 extreme_words <- books_sample$words[3] %>% unlist() # Falchester
 
 
 ##### Single word solution #####
-# if(length(single_word) == 1) {
+if(length(single_word) == 1) {
   ID_result <- str_sub(single_word, 1, ID_title_length)
-# }
+}
 ID_result
 
 
@@ -45,6 +46,7 @@ if(length(many_words) == ID_title_length) {
     ID_result1[i] <- str_sub(many_words[i], 1, 1)
   }
 }
+rm(i)
 ID_result1 <- paste0(ID_result1, collapse = "")
 ID_result1
 
@@ -66,7 +68,7 @@ ID_result2
 if(length(many_words) == ID_title_length) {
   ID_result3 <- str_extract(many_words, "^[:alpha:]{1}") %>%
     unlist() %>%
-    paste0(collapse = "")
+    str_flatten()
 }
 ID_result3
 
@@ -76,7 +78,40 @@ ID_result1 == ID_result3
 
 
 ##### Many word solution, pt 2 #####
+# Part 2 gets into more complicated cases (title has more words than ID-characters)
+
 if(length(extreme_words) > ID_title_length) {
-  # check for removable words
-  # then it gets complicated
+  # Check for removable words
+  rm_words <- str_detect(extreme_words, removable_regex)
+  use_words <- extreme_words[!rm_words]
+  
+  # if length(use_words) == ID_title_length
+  # then: use pt1 solution
+  # make it into a function? `extract_(first/n)_letters`? (specific "first" vs general "n")
+  if(length(use_words) == ID_title_length) {
+    
+    ID_result4 <- str_extract(use_words, "^[:alpha:]{1}") %>%
+      unlist() %>%
+      str_flatten()
+  }
+  
+  # if: length(use_words) > ID_title_length
+  # then: use initial letter of the first five words? - def make&integrate a function as next step
+  else if(length(use_words) > ID_title_length) {
+    ID_result4 <- str_extract(use_words, "^[:alpha:]{1}") %>%
+      unlist() %>%
+      str_flatten() %>% 
+      str_sub(start = 1, end = ID_title_length)
+  }
+  
+  # if: length(use_words) < ID_title_length
+  # then: most complicated, need to work out a system
+  else if(length(use_words) < ID_title_length) {
+    # TBD
+  }
 }
+ID_result4
+
+
+#### Test cases - authors ####
+# Should be fairly straightforward, but what about multi-author works? Just use first author?
