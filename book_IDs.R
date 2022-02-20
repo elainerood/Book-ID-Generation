@@ -1,4 +1,4 @@
-#### Load packages, set parameters ####
+#### Setup ####
 library(tidyverse)
 
 ID_title_length <- 5
@@ -6,6 +6,23 @@ ID_title_length <- 5
 removable <- c("a", "and", "for", "in", "of", "the", "to", "with") %>% 
   str_to_upper() # titles will be caps for consistency
 removable_regex <- paste0("^", removable, "$", collapse = "|")
+
+extract_n_letters <- function(words_string, n = 1, len = ID_title_length) {
+  # Adapted from: stackoverflow.com/questions/58659318/
+  ### Extract the first `n` letters of each element of character vector `words_string`,
+  ### optionally truncating the resulting string to length `len`.
+  ## Arguments:
+  ## - words_string = character vector, each element is a word to grab letters from
+  ##                  (here, generated via str_split(*, boundary("word")))
+  ## - n = numeric; number of letters to extract (starts from beginning)
+  ## - len = numeric; length of output (truncates result)
+  ##         (if -1, no truncation; see `str_sub` documentation)
+  
+  str_extract(words_string, paste0("^[:alpha:]{", n, "}")) %>%
+    unlist() %>%
+    str_flatten() %>% 
+    str_sub(start = 1, end = len)
+}
 
 
 
@@ -64,11 +81,8 @@ ID_result2
 
 
 ## Non-loop version
-# Adapted from: stackoverflow.com/questions/58659318/
 if(length(many_words) == ID_title_length) {
-  ID_result3 <- str_extract(many_words, "^[:alpha:]{1}") %>%
-    unlist() %>%
-    str_flatten()
+  ID_result3 <- extract_n_letters(many_words)
 }
 ID_result3
 
@@ -87,21 +101,14 @@ if(length(extreme_words) > ID_title_length) {
   
   # if length(use_words) == ID_title_length
   # then: use pt1 solution
-  # make it into a function? `extract_(first/n)_letters`? (specific "first" vs general "n")
   if(length(use_words) == ID_title_length) {
-    
-    ID_result4 <- str_extract(use_words, "^[:alpha:]{1}") %>%
-      unlist() %>%
-      str_flatten()
+    ID_result4 <- extract_n_letters(use_words)
   }
   
   # if: length(use_words) > ID_title_length
-  # then: use initial letter of the first five words? - def make&integrate a function as next step
+  # then: use initial letter of the first five words?
   else if(length(use_words) > ID_title_length) {
-    ID_result4 <- str_extract(use_words, "^[:alpha:]{1}") %>%
-      unlist() %>%
-      str_flatten() %>% 
-      str_sub(start = 1, end = ID_title_length)
+    ID_result4 <- extract_n_letters(use_words)
   }
   
   # if: length(use_words) < ID_title_length
