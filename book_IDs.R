@@ -46,6 +46,10 @@ many_words <- books_sample$words[10] %>% unlist() # TDitW
 extreme_words <- books_sample$words[3] %>% unlist() # Falchester
 filler_words <- books_sample$words[12] %>% unlist() # ASatCoG
 
+# none of the titles in the sample have what I need for this test case
+fake_words <- books_sample$words[19] %>% unlist() # ItLoD
+fake_words[5:6] <- c("A", "DRAKE")
+
 
 ##### Single word solution #####
 if(length(single_word) == 1) {
@@ -121,47 +125,87 @@ if(length(extreme_words) > ID_title_length) {
   # then: most complicated, need to work out a system
   # - could just keep it as less than the max ID length (that's already a case for
   #   single-word titles), but it just doesn't look as good
-  else if(length(use_words) < ID_title_length) {
+  else {
     # bring back removable word(s), with preference:
     #   a > of > to > in > and > for > with > the
     # if multiple instances of a given word appear, use the first one(s)
     
     # Brute force solution: keep (re)adding/testing until the desired result is reached
     chr_needed <- abs(length(use_words) - ID_title_length) # number of characters to add
-    for(re in removable) {
-      regex_test <- paste0("^", re, "$")
-      regex_count <- sum(str_detect(filler_words, regex_test)) # note you need the FULL title here
-      
-      if(regex_count < 1) {
-        # Removable word does not appear in the original title, so try next one
-        next
-      } else {
-        # Removable word does appear in the original title
-        if (regex_count >= chr_needed) {
-          # Enough (or more) instances of the removable word to pad out the ID, so
-          # remove other words, then grab the first `chr_needed` instances of the kept word
-          to_remove <- str_detect(filler_words,
-                                  str_replace(removable_regex,
-                                              paste0("\\|?\\^", re, "\\$"), ""))
-          ID_words <- filler_words[!to_remove]
-          
-          if(length(ID_words) > ID_title_length) {
-            # More words retained than `chr_needed`, so drop extra (later) ones
-            rmv <- str_detect(ID_words, regex_test) %>%
-              which(.) %>% 
-              .[seq_len(chr_needed)]
-            ID_words <- ID_words[-rmv]
-          }
-          
-          ID_result4 <- extract_n_letters(ID_words)
+    used_regex <- character()
+    continue <- TRUE
+    
+    while(continue) {
+      for(re in removable) {
+        regex_test <- paste0("^", re, "$")
+        regex_count <- sum(str_detect(filler_words, regex_test)) # note you need the FULL title here
+        
+        if(regex_count < 1) {
+          # Removable word does not appear in the original title, so try next one
+          next
+          print("regex ct < 1; next")
         } else {
-          # Less than enough instances of the removable word to pad out the ID
-          # TBD
-          # Have to save used word(s) (or at least indices of `filler_words`), then `next`
-          # **WILL NEED TO ADJUST `chr_needed` -> move to different part of the loop
-          #   (may need `while` loop anyway) or maybe update via `length(ID_words)`?
+          # Removable word does appear in the original title
+          
+          # Need to move `<` scenario above this (& change if-condition),
+          # otherwise could get less-preferred words used first, if there
+          # are more of them? otherwise e.g., many "OF"s in a title could knock
+          # out a number of "A"s that isn't enough to reach the min length on its own
+          
+          if (regex_count >= chr_needed) {
+            # Enough (or more) instances of the removable word to pad out the ID, so
+            # remove other words, then grab the first `chr_needed` instances of the kept word
+            to_remove <- str_detect(filler_words,
+                                    # text against `removable_regex` without the kept-word
+                                    str_remove(removable_regex,
+                                                paste0("\\|?\\^", re, "\\$")))
+            ID_words <- filler_words[!to_remove]
+            
+            if(length(ID_words) > ID_title_length) {
+              # More words retained than `chr_needed`, so drop the one(s) that show up later
+              rmv <- str_detect(ID_words, regex_test) %>%
+                which(.) %>% 
+                .[seq_len(chr_needed)]
+              ID_words <- ID_words[-rmv]
+            }
+            
+            ID_result4 <- extract_n_letters(ID_words)
+            # **TEST THIS
+            continue <- FALSE
+            print("regex > chr; break")
+            break
+          } else {
+            # Less than enough instances of the removable word to pad out the ID
+            # See if using previous words gets up to enough characters
+            used_regex <- c(used_regex, re)
+            short_rmv_regex <- str_remove_all(removable_regex,
+                                               paste0("\\|?\\^", used_regex, "\\$", collapse = "|")
+                                              ) %>% 
+              str_remove_all("\\|$|^\\|") # remove any leading/trailing pipes
+            
+            to_remove <- str_detect(filler_words, short_rmv_regex)
+            ID_words <- filler_words[!to_remove]
+            
+            if(length(ID_words) >= ID_title_length) {
+              ID_result4 <- extract_n_letters(ID_words)
+              # **TEST THIS
+              continue <- FALSE
+              print("regex < chr; break")
+              break
+            } else {
+              next
+              print("regex > chr; next")
+            }
+            # Possible: ID is not long enough even with ALL removable-words added back;
+            # keep the < `ID_title_length` version, or pad it out?
+            # Padding out would require (preferentially) taking the first `n` characters of
+            # (certain) words instead of only the first 1 character
+          }
         }
       }
+      # **for testing only
+      print("infinite while; break")
+      break
     }
   }
 }
