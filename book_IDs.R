@@ -8,6 +8,18 @@ removable <- c("a", "of", "to", "in", "and", "for", "with", "the") %>%
 # ^ ordered by below preference for being retained
 removable_regex <- paste0("^", removable, "$", collapse = "|")
 
+format_title <- function(title) {
+  ### Convert a string (book title) to the desired format for later use
+  ## Arguments:
+  ## - title = string
+  #**TO DO: make this look/sound nicer
+  
+  str_remove_all(title, "[:punct:]") %>% # don't want punctuation in ID
+    str_to_upper() %>%                   # caps for consistency
+    str_split(boundary("word")) %>% 
+    unlist()
+}
+
 extract_n_letters <- function(words_string, n = 1, len = ID_title_length) {
   # Adapted from: stackoverflow.com/questions/58659318/
   ### Extract the first `n` letters of each element of character vector `words_string`,
@@ -31,12 +43,8 @@ extract_n_letters <- function(words_string, n = 1, len = ID_title_length) {
 books <- read_csv("book_list.csv")
 
 set.seed(2022)
-books_sample <- slice_sample(books, n = 20)
-
-books_sample <- books_sample %>%
-  mutate(no_punct_title = str_remove_all(title, "[:punct:]"), # don't want punctuation in ID
-         words = str_split(str_to_upper(no_punct_title), # caps for consistency
-                           boundary("word")))
+books_sample <- slice_sample(books, n = 20) %>%
+  mutate(words = map(title, format_title))
 
 
 
@@ -210,6 +218,68 @@ if(length(extreme_words) > ID_title_length) {
   }
 }
 ID_result4
+
+#### Function-ify ####
+generate_title_ID <- function(title, len = ID_title_length) {
+  ### [desc]
+  ## Arguments:
+  ## - title = character vector where each element is a word to grab letters from
+  ##           -OR-
+  ##           string that will be transformed into the above format
+  ## - len = numeric (integer); 
+  
+  title <- format_title(title) # no change to pre-formatted input
+  
+  if(length(title) == 1) {
+    ## Single word title
+    ID_result <- str_sub(title, 1, ID_title_length)
+    return(ID_result)
+    
+  } else if(length(title) == ID_title_length) {
+    ## TItle has n = `ID_title_length` words
+    ID_result <- extract_n_letters(title)
+    return(ID_result)
+    
+  } else {
+    ## Title needs words added/removed to be appropriate length
+    if(length(title) > ID_title_length) {
+      ## Title is too long
+      print("title too long")
+      rm_words <- str_detect(title, removable_regex)
+      use_words <- title[!rm_words]
+      
+      # **TO DO: for too-short-with-removed-words, split into pieces made into functions?
+      # might be able to simplify/reduce loops that way
+      # e.g., count instances of each removable word & use cumsum() to determine which are needed
+      # --> also allows for quick check of "there aren't enough total characters"
+      #     (see example in below section, which is why it's ordered second instead of first)
+      
+      # TBD
+    }
+    
+    if(length(title) < ID_title_length) { # **TO DO: add "or" to catch too-short-with-removed-words cases?
+      ## TItle is too short
+      print("title too short")
+      # sum(str_length(title)) can test for whether the entire title isn't long enough
+      # (separate case from one-word title, e.g. "A Sun" would end up here instead of there)
+      
+      # TBD
+    }
+    
+    # ID_result <- x
+    # return(ID_result)
+  }
+  
+  
+}
+
+# title <- books_sample$title[8] # Thud!
+# title <- books_sample$title[10] # TDitW
+# title <- books_sample$title[3] # Falchester
+# title <- books_sample$title[12] # ASatCoG
+# title <- "In the Labyrinth of A Drake"
+# title <- "The Test"
+generate_title_ID(title)
 
 
 #### Test cases - authors ####
