@@ -3,7 +3,7 @@ library(tidyverse)
 
 ID_title_length <- 5
 
-removable <- c("a", "of", "to", "in", "and", "for", "with", "the") %>% 
+removable <- c("a", "an", "of", "to", "in", "and", "for", "with", "the") %>% 
   str_to_upper() # titles will be caps for consistency
 # ^ ordered by below preference for being retained
 removable_regex <- paste0("^", removable, "$", collapse = "|")
@@ -12,7 +12,7 @@ format_title <- function(title) {
   ### Convert a string (book title) to the desired format for later use
   ## Arguments:
   ## - title = string
-  #**TO DO: make this look/sound nicer
+  # **TO DO: make this look/sound nicer
   
   str_remove_all(title, "[:punct:]") %>% # don't want punctuation in ID
     str_to_upper() %>%                   # caps for consistency
@@ -20,18 +20,42 @@ format_title <- function(title) {
     unlist()
 }
 
-extract_n_letters <- function(words_string, n = 1, len = ID_title_length) {
+extract_n_letters <- function(words_string, n = 1L, len = ID_title_length, exact_n = TRUE) {
   # Adapted from: stackoverflow.com/questions/58659318/
   ### Extract the first `n` letters of each element of character vector `words_string`,
   ### optionally truncating the resulting string to length `len`.
   ## Arguments:
   ## - words_string = character vector, each element is a word to grab letters from
   ##                  (here, generated via str_split(*, boundary("word")))
-  ## - n = numeric; number of letters to extract (starts from beginning)
-  ## - len = numeric; length of output (truncates result)
+  ## - n = numeric (converted to integer); number of letters to extract (starts from beginning)
+  ##       (must be integer due to `if_else` typing requirements;
+  ##        if non-integer, see `as.integer` documentation for coercion rules)
+  ## - len = numeric (integer); length of output (truncates result)
   ##         (if -1, no truncation; see `str_sub` documentation)
+  ## - exact_n = logical; return exactly `n` characters for each word
+  ##             (if TRUE, function will return `NA` if ANY word has < `n` characters)
   
-  str_extract(words_string, paste0("^[:alpha:]{", n, "}")) %>%
+  ## **TO DO: this doesn't handle titles that include numbers... not too bad though,
+  ## mostly needs a determination on whether numbers vs digits count as "words"
+  ## (e.g. "13 Candles on a Shelf" --> "13COAS" vs "1COAS"), and an update to the regex
+  
+  n <- as.integer(n)
+  
+  if(exact_n) {
+    extracted <- str_extract(words_string,paste0("^[:alpha:]{", n, "}"))
+  } else {
+    # str_extract() will return NA if n > the string length, so vary the requested length if needed
+    extracted <- str_extract(words_string,
+                paste0("^[:alpha:]{",
+                       if_else(str_length(words_string) < n,
+                               str_length(words_string),
+                               n),
+                       "}"
+                )
+    )
+  }
+  
+  extracted %>% 
     unlist() %>%
     str_flatten() %>% 
     str_sub(start = 1, end = len)
@@ -221,14 +245,14 @@ ID_result4
 
 #### Function-ify ####
 generate_title_ID <- function(title, len = ID_title_length) {
-  ### [desc]
+  ### Generate an ID of a given length for a provided string (book title)
   ## Arguments:
   ## - title = character vector where each element is a word to grab letters from
   ##           -OR-
   ##           string that will be transformed into the above format
-  ## - len = numeric (integer); 
+  ## - len = numeric (integer); defaults to desired ID length
   
-  title <- format_title(title) # no change to pre-formatted input
+  title <- format_title(title) # does not affect pre-formatted input
   
   if(length(title) == 1) {
     ## Single word title
@@ -236,41 +260,56 @@ generate_title_ID <- function(title, len = ID_title_length) {
     return(ID_result)
     
   } else if(length(title) == ID_title_length) {
-    ## TItle has n = `ID_title_length` words
+    ## Title has n = `ID_title_length` words
     ID_result <- extract_n_letters(title)
     return(ID_result)
     
-  } else {
-    ## Title needs words added/removed to be appropriate length
-    if(length(title) > ID_title_length) {
-      ## Title is too long
-      print("title too long")
-      rm_words <- str_detect(title, removable_regex)
-      use_words <- title[!rm_words]
+  } else if(length(title) < ID_title_length) {
+    ## Title has n < `ID_title_length` words
+    if(sum(str_length(title)) < ID_title_length) {
+      ## Title does not have enough characters; use full title as ID
+      ID_result <- paste0(title, collapse = "")
+      return(ID_result)
       
-      # **TO DO: for too-short-with-removed-words, split into pieces made into functions?
-      # might be able to simplify/reduce loops that way
-      # e.g., count instances of each removable word & use cumsum() to determine which are needed
-      # --> also allows for quick check of "there aren't enough total characters"
-      #     (see example in below section, which is why it's ordered second instead of first)
+    } else {
+      ## Title has enough characters but not enough words
+      # # easy version:
+      # ID_result <- extract_n_letters(title, n = ceiling(ID_title_length/2))
+      # # but that treats all words the same and I don't want that
+      # # (e.g., every title that starts with "the" -> "THE__" = bad)
       
-      # TBD
+      if(str_detect(title, removable_regex)) {
+        ## Removable words exist in the title
+        # TBD - thinking e.g., use first 1 character of the removables for these
+        # (if the whole title isn't long enough, that's the elseif())
+        print("title too short - removable exist")
+        
+      } else {
+        ## No removable words exist in the title
+        # use "easy solution" above
+        # (have to use ceiling() isntead of floor() because otherwise the result
+        # doesn't necessarily meet `ID_title_length`)
+        ID_result <- extract_n_letters(title, n = ceiling(ID_title_length/2))
+      }
+      
     }
     
-    if(length(title) < ID_title_length) { # **TO DO: add "or" to catch too-short-with-removed-words cases?
-      ## TItle is too short
-      print("title too short")
-      # sum(str_length(title)) can test for whether the entire title isn't long enough
-      # (separate case from one-word title, e.g. "A Sun" would end up here instead of there)
-      
-      # TBD
-    }
+  } else if(length(title) > ID_title_length) {
+    ## Title has too many words
+    print("title too long")
+    rm_words <- str_detect(title, removable_regex)
+    use_words <- title[!rm_words]
     
+    # **TO DO: for too-short-with-removed-words, split into pieces made into functions?
+    # might be able to simplify/reduce loops that way
+    # e.g., count instances of each removable word & use cumsum() to determine which are needed
+    # --> also allows for quick check of "there aren't enough total characters"
+    #     (see example in below section, which is why it's ordered second instead of first)
+    
+    # TBD
     # ID_result <- x
     # return(ID_result)
   }
-  
-  
 }
 
 # title <- books_sample$title[8] # Thud!
@@ -279,6 +318,7 @@ generate_title_ID <- function(title, len = ID_title_length) {
 # title <- books_sample$title[12] # ASatCoG
 # title <- "In the Labyrinth of A Drake"
 # title <- "The Test"
+# title <- books_sample$title[11] # AJ
 generate_title_ID(title)
 
 
