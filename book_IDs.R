@@ -1,9 +1,10 @@
 #### Setup ####
 library(tidyverse)
 
-ID_title_length <- 5
+# ID_title_length <- 5
+ID_title_length <- 6
 
-removable <- c("a", "an", "of", "to", "in", "and", "for", "with", "the") %>% 
+removable <- c("a", "an", "of", "to", "in", "on", "and", "for", "with", "the") %>% 
   str_to_upper() # titles will be caps for consistency
 # ^ ordered by below preference for being retained
 removable_regex <- paste0("^", removable, "$", collapse = "|")
@@ -42,7 +43,7 @@ extract_n_letters <- function(words_string, n = 1L, len = ID_title_length, exact
   n <- as.integer(n)
   
   if(exact_n) {
-    extracted <- str_extract(words_string,paste0("^[:alpha:]{", n, "}"))
+    extracted <- str_extract(words_string, paste0("^[:alpha:]{", n, "}"))
   } else {
     # str_extract() will return NA if n > the string length, so vary the requested length if needed
     extracted <- str_extract(words_string,
@@ -273,25 +274,54 @@ generate_title_ID <- function(title, len = ID_title_length) {
       
     } else {
       ## Title has enough characters but not enough words
-      # # easy version:
-      # ID_result <- extract_n_letters(title, n = ceiling(ID_title_length/2))
-      # # but that treats all words the same and I don't want that
-      # # (e.g., every title that starts with "the" -> "THE__" = bad)
+      rm_words <- str_detect(title, removable_regex)
       
-      if(str_detect(title, removable_regex)) {
+      if(any(rm_words)) {
         ## Removable words exist in the title
-        # TBD - thinking e.g., use first 1 character of the removables for these
-        # (if the whole title isn't long enough, that's the elseif())
-        print("title too short - removable exist")
+        use_words <- title[!rm_words]
+
+        if(sum(str_length(use_words)) > ID_title_length) {
+          ## Title has enough characters without removable words
+          ID_result <- extract_n_letters(use_words, n = ceiling(ID_title_length/length(use_words)))
+          
+        } else {
+          # **TO DO: this is hard to think about all situations for, so may need
+          # to revisit after testing, if results aren't what's desired
+          # (specifically, wondering about short kept-words causing problems, but
+          # that probably isn't too common?)
+          rmv_n <- ID_title_length - str_length(use_words)
+          keep_n <- ceiling(
+            (ID_title_length - rmv_n)/length(use_words)
+            # number of characters available for kept-words divided by number of kept-words
+          )
+          
+          if((rmv_n + keep_n) == ID_title_length ) {
+            ID_result <- str_extract(title,
+                                   paste0("^[:alpha:]{", if_else(rm_words, rmv_n, keep_n), "}")
+                                   ) %>% 
+            str_flatten()
+          } else {
+            print("too short - removable words; rmv+keep <> IDlen")
+          }
+        }
         
       } else {
         ## No removable words exist in the title
-        # use "easy solution" above
-        # (have to use ceiling() isntead of floor() because otherwise the result
+        # (have to use ceiling() instead of floor() because otherwise the result
         # doesn't necessarily meet `ID_title_length`)
-        ID_result <- extract_n_letters(title, n = ceiling(ID_title_length/2))
+        # could add a tweak for prefer early/late words, but that would mean a new setup
+        # (check total length prior to str_flatten(), so individual words' trims can be adjusted?)
+        ID_result <- extract_n_letters(title,
+                                       n = ceiling(ID_title_length/length(title)),
+                                       exact_n = FALSE)
+        # **TO DO: want this to have at least one letter for each word, which
+        # it currently doesn't do (e.g., if `ID_title_length` is 6:
+        # - In the Labyrinth of Drakes -> "LABDRA" instead of "ITLODR"
+        # - She Who Became the Sun -> "SHWHBE" instead of "SWBTSU")
+        # I'm going to be chasing this kind of thing down forever but at some point it'll be Good Enough
       }
       
+      return(ID_result)
     }
     
   } else if(length(title) > ID_title_length) {
@@ -307,6 +337,11 @@ generate_title_ID <- function(title, len = ID_title_length) {
     #     (see example in below section, which is why it's ordered second instead of first)
     
     # TBD
+    
+    # **TO DO: pad out short IDs to the correct length? e.g., "THUD" -> "THUDxx"
+    # (pad characters, if letters, would use lowercase since titles are caps;
+    # not sure about using special characters e.g. underscore)
+    
     # ID_result <- x
     # return(ID_result)
   }
@@ -314,13 +349,16 @@ generate_title_ID <- function(title, len = ID_title_length) {
 
 # title <- books_sample$title[8] # Thud!
 # title <- books_sample$title[10] # TDitW
+# title <- "A Sun"
+# title <- "The Test"
+# title <- books_sample$title[2] # PotS
+# title <- books_sample$title[11] # AJ
 # title <- books_sample$title[3] # Falchester
 # title <- books_sample$title[12] # ASatCoG
 # title <- "In the Labyrinth of A Drake"
-# title <- "The Test"
-# title <- books_sample$title[11] # AJ
 generate_title_ID(title)
 
+# mutate(books, title_id = map(title, generate_title_ID)) %>% View()
 
 #### Test cases - authors ####
 # Should be fairly straightforward, but what about multi-author works? Just use first author?
