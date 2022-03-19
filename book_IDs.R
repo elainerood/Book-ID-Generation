@@ -253,21 +253,25 @@ generate_title_ID <- function(title, len = ID_title_length) {
   ##           string that will be transformed into the above format
   ## - len = numeric (integer); defaults to desired ID length
   
+  # **TO DO: pad out short IDs to the correct length? e.g., "THUD" -> "THUDxx"
+  # (the pad-characters, if letters, would use lowercase since titles are caps;
+  # not sure about using special characters e.g. underscore)
+  
   title <- format_title(title) # does not affect pre-formatted input
   
   if(length(title) == 1) {
     ## Single word title
-    ID_result <- str_sub(title, 1, ID_title_length)
+    ID_result <- str_sub(title, 1, len)
     return(ID_result)
     
-  } else if(length(title) == ID_title_length) {
+  } else if(length(title) == len) {
     ## Title has n = `ID_title_length` words
-    ID_result <- extract_n_letters(title)
+    ID_result <- extract_n_letters(title, len = len)
     return(ID_result)
     
-  } else if(length(title) < ID_title_length) {
+  } else if(length(title) < len) {
     ## Title has n < `ID_title_length` words
-    if(sum(str_length(title)) < ID_title_length) {
+    if(sum(str_length(title)) < len) {
       ## Title does not have enough characters; use full title as ID
       ID_result <- paste0(title, collapse = "")
       return(ID_result)
@@ -276,26 +280,29 @@ generate_title_ID <- function(title, len = ID_title_length) {
       ## Title has enough characters but not enough words
       rm_words <- str_detect(title, removable_regex)
       
+      # **TO DO: alternative to below = if padding too-short titles, this can be padded too
+      # could add a `pad` argument to the function, to make things more complicated
+      
       if(any(rm_words)) {
         ## Removable words exist in the title
         use_words <- title[!rm_words]
 
-        if(sum(str_length(use_words)) > ID_title_length) {
+        if(sum(str_length(use_words)) > len) {
           ## Title has enough characters without removable words
-          ID_result <- extract_n_letters(use_words, n = ceiling(ID_title_length/length(use_words)))
+          ID_result <- extract_n_letters(use_words, n = ceiling(len/length(use_words)))
           
         } else {
           # **TO DO: this is hard to think about all situations for, so may need
           # to revisit after testing, if results aren't what's desired
           # (specifically, wondering about short kept-words causing problems, but
           # that probably isn't too common?)
-          rmv_n <- ID_title_length - str_length(use_words)
+          rmv_n <- len - str_length(use_words)
           keep_n <- ceiling(
-            (ID_title_length - rmv_n)/length(use_words)
+            (len - rmv_n)/length(use_words)
             # number of characters available for kept-words divided by number of kept-words
           )
           
-          if((rmv_n + keep_n) == ID_title_length ) {
+          if((rmv_n + keep_n) == len) {
             ID_result <- str_extract(title,
                                    paste0("^[:alpha:]{", if_else(rm_words, rmv_n, keep_n), "}")
                                    ) %>% 
@@ -312,7 +319,7 @@ generate_title_ID <- function(title, len = ID_title_length) {
         # could add a tweak for prefer early/late words, but that would mean a new setup
         # (check total length prior to str_flatten(), so individual words' trims can be adjusted?)
         ID_result <- extract_n_letters(title,
-                                       n = ceiling(ID_title_length/length(title)),
+                                       n = ceiling(len/length(title)),
                                        exact_n = FALSE)
         # **TO DO: want this to have at least one letter for each word, which
         # it currently doesn't do (e.g., if `ID_title_length` is 6:
@@ -324,39 +331,45 @@ generate_title_ID <- function(title, len = ID_title_length) {
       return(ID_result)
     }
     
-  } else if(length(title) > ID_title_length) {
+  } else if(length(title) > len) {
     ## Title has too many words
-    print("title too long")
     rm_words <- str_detect(title, removable_regex)
     use_words <- title[!rm_words]
+    
+    if(length(use_words) >= len) {
+      ID_result <- extract_n_letters(use_words, len = len)
+      return(ID_result)
+    }
+    # **TO DO: could restructure this to cut down on repeated steps like above?
+    # e.g., calculate `use_words` at the beginning, & change the first else-if to
+    # (`title` OR `use_words` == `ID_title_length`)
+    
+    if(length(use_words) < len) {
+      print("title too long - use_words too short")
+    }
     
     # **TO DO: for too-short-with-removed-words, split into pieces made into functions?
     # might be able to simplify/reduce loops that way
     # e.g., count instances of each removable word & use cumsum() to determine which are needed
     # --> also allows for quick check of "there aren't enough total characters"
-    #     (see example in below section, which is why it's ordered second instead of first)
     
     # TBD
-    
-    # **TO DO: pad out short IDs to the correct length? e.g., "THUD" -> "THUDxx"
-    # (pad characters, if letters, would use lowercase since titles are caps;
-    # not sure about using special characters e.g. underscore)
     
     # ID_result <- x
     # return(ID_result)
   }
 }
 
-# title <- books_sample$title[8] # Thud!
-# title <- books_sample$title[10] # TDitW
-# title <- "A Sun"
-# title <- "The Test"
-# title <- books_sample$title[2] # PotS
-# title <- books_sample$title[11] # AJ
-# title <- books_sample$title[3] # Falchester
-# title <- books_sample$title[12] # ASatCoG
-# title <- "In the Labyrinth of A Drake"
-generate_title_ID(title)
+generate_title_ID(books_sample$title[8]) # Thud!
+generate_title_ID(books_sample$title[10]) # TDitW
+generate_title_ID("A Sun")
+generate_title_ID("The Test")
+generate_title_ID(books_sample$title[2]) # PotS
+generate_title_ID(books_sample$title[11]) # AJ
+generate_title_ID(books_sample$title[3]) # Falchester
+generate_title_ID(books_sample$title[12]) # ASatCoG
+generate_title_ID("In the Labyrinth of A Drake")
+# generate_title_ID("13 Candles on a Shelf") # for later testing
 
 # mutate(books, title_id = map(title, generate_title_ID)) %>% View()
 
