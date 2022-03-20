@@ -131,7 +131,7 @@ if(length(extreme_words) > ID_title_length) {
         if(regex_count < 1) {
           # Removable word does not appear in the original title, so try next one
           next
-          print("regex ct < 1; next")
+          # print("regex ct < 1; next")
         } else {
           # Removable word does appear in the original title
           
@@ -221,7 +221,7 @@ generate_title_ID <- function(title, len = ID_title_length) {
     
   } else if(length(title) == len) {
     ## Title has n = `ID_title_length` words
-    ID_result <- extract_n_letters(title, len)
+    ID_result <- extract_n_letters(title, len = len)
     return(ID_result)
     
   } else if(length(title) < len) {
@@ -241,7 +241,7 @@ generate_title_ID <- function(title, len = ID_title_length) {
       if(any(rm_words)) {
         ## Removable words exist in the title
         use_words <- title[!rm_words]
-
+        
         if(sum(str_length(use_words)) > len) {
           ## Title has enough characters without removable words
           ID_result <- extract_n_letters(use_words, n = ceiling(len/length(use_words)))
@@ -260,7 +260,7 @@ generate_title_ID <- function(title, len = ID_title_length) {
                                      paste0("^[:alpha:]{",
                                             if_else(rm_words, rmv_n, keep_n),
                                             "}")
-                                     ) %>% 
+            ) %>% 
               str_flatten()
           } else {
             print("too short - removable words; rmv+keep <> IDlen")
@@ -295,34 +295,80 @@ generate_title_ID <- function(title, len = ID_title_length) {
     
     if(length(use_words) >= len) {
       ## `use_words` has as many or more words than needed
-      ID_result <- extract_n_letters(use_words, len)
+      ID_result <- extract_n_letters(use_words, len = len)
       return(ID_result)
-    }
-    # **TO DO: could restructure this to cut down on repeated steps like above?
-    # e.g., calculate `use_words` at the beginning, & change the first else-if to
-    # (`title` OR `use_words` == `ID_title_length`)
-    
-    if(length(use_words) < len) {
+      # **TO DO: could restructure this to cut down on repeated steps like above?
+      # e.g., calculate `use_words` at the beginning, & change the first else-if to
+      # (`title` OR `use_words` == `ID_title_length`)
+      
+    } else {
       ## `use_words` has fewer words than needed
       # Bring back removable word(s), with preference:
-      #   a/an > of > to > in > on > and > for > with > the
+      #   a > an > of > to > in > on > and > for > with > the
       # If multiple instances of a given word appear, use the first one(s)
-      print("title too long - use_words too short")
       
-      # **TO DO
-    }
-    
-    # **TO DO: for too-short-with-removed-words, split into pieces made into functions?
-    # might be able to simplify/reduce loops that way
-    # e.g., count instances of each removable word & use cumsum() to determine which are needed
-    # --> also allows for quick check of "there aren't enough total characters"
-    
-    # TBD
-    
-    # ID_result <- x
-    # return(ID_result)
-  }
-}
+      # Brute force solution: keep (re)adding/testing until the desired result is reached
+      chr_needed <- abs(length(use_words) - len) # number of characters to add
+      used_regex <- character()
+      
+      for(re in removable) {
+        regex_test <- paste0("^", re, "$")
+        regex_count <- sum(str_detect(title, regex_test)) # want the FULL title here
+        
+        if(regex_count < 1) {
+          ## Removable word does not appear in the original title, so try the next one
+          # Not adding to used_regex here because:
+          # 1) the word isn't present, so it doesn't matter
+          # 2) if all elements of `removable_words` are used, the final one (currently "the")
+          #    will result in an empty string for `rmv_unused_regex`, which will match every
+          #    word in `title` and result in an empty ID
+          # print("regex ct < 1; next")
+          next
+        } else {
+          ## Removable word does appear in the original title
+          # See if using previous words gets up to enough characters
+          used_regex <- c(used_regex, re)
+          rmv_unused_regex <- str_remove_all(removable_regex,
+                                             paste0("\\|?\\^",
+                                                    used_regex,
+                                                    "\\$",
+                                                    collapse = "|")
+          ) %>% 
+            str_remove_all("\\|$|^\\|") # remove any leading/trailing pipes
+          
+          to_remove <- str_detect(title, rmv_unused_regex)
+          ID_words <- title[!to_remove]
+          
+          if(length(ID_words) > len) {
+            # More words retained than `chr_needed`, so drop the one(s) that show up later
+            new_chr_needed <- abs(len - length(ID_words) + regex_count)
+            
+            rmv <- str_detect(ID_words, regex_test) %>%
+              which(.) %>% 
+              sort(., decreasing = TRUE) %>% 
+              .[seq_len(new_chr_needed)]
+            ID_words <- ID_words[-rmv]
+            
+            # print("regex ID > chr; break")
+            break
+          } else if(length(ID_words) == len) {
+            # ID_words is already what it needs to be
+            # print("regex ID == chr; break")
+            break
+          } else {
+            # Still not enough words; try the next one
+            # print("regex ID < chr; next")
+            next
+          }
+        }
+      } # end for()
+      # print("end for loop")
+      ID_result <- extract_n_letters(ID_words, len = len)
+      return(ID_result)
+      
+    } # end use_words < len
+  } # end title > len
+} # end function()
 
 generate_title_ID(books_sample$title[8]) # Thud!
 generate_title_ID(books_sample$title[10]) # TDitW
